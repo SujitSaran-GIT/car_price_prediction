@@ -81,6 +81,86 @@ used-car-price-prediction/
 
 ---
 
+## ⚙️ Project Setup
+
+Follow the steps below to set up the project locally.
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/<your-username>/used-car-price-prediction.git
+cd used-car-price-prediction
+```
+
+### 2. Create a Virtual Environment
+
+**Windows**
+
+```bash
+python -m venv venv
+venv\Scripts\activate
+```
+
+**Linux / macOS**
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
+
+### 3. Install Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 4. Verify Installation
+
+```bash
+python --version
+pip list
+```
+
+### 5. Launch Jupyter Notebook
+
+```bash
+jupyter notebook
+```
+
+or
+
+```bash
+jupyter lab
+```
+
+### 6. Run the Streamlit Application
+
+```bash
+streamlit run app/app.py
+```
+
+---
+
+## 📁 Project Structure
+
+```text
+used-car-price-prediction/
+│
+├── app/                # Streamlit application
+├── data/
+│   ├── raw/            # Original dataset
+│   ├── processed/      # Cleaned dataset
+│   └── external/       # External datasets
+├── models/             # Saved ML models
+├── notebooks/          # Jupyter notebooks
+├── reports/            # Reports and visualizations
+├── src/                # Source code
+├── tests/              # Unit tests
+├── requirements.txt
+├── README.md
+└── main.py
+```
+
 ## 📜 License
 
 This project is licensed under the MIT License.
