@@ -46,7 +46,7 @@ app.include_router(cars.router)
 async def root():
     return {
         "message": "Used Car Price Prediction API",
-        "version": settings.APP_VERSION,
+        "version": settings.PROJECT_VERSION,
         "docs_url": "/docs",
         "total_cars": len(data_service.load_data()),
         "endpoints": {
