@@ -31,12 +31,13 @@ st.markdown("""
 
 # ─── Sidebar ───
 st.sidebar.markdown("## ⚙️ API Configuration")
-API_BASE = st.sidebar.text_input("API Base URL", "http://localhost:8000")
+API_BASE = st.sidebar.text_input("API Base URL", "http://127.0.0.1:8000")
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 📊 Navigation")
 page = st.sidebar.radio(
     "Go to",
-    ["🏠 Home", "🔍 Data Explorer", "🚗 Car Lookup", "📈 Data Quality", "📊 Summary Stats", "🔬 Column Profiler"]
+    ["🏠 Home", "🔍 Data Explorer", "🚗 Car Lookup", "📈 Data Quality", 
+     "📊 Summary Stats", "🔬 Column Profiler", "🤖 Model Lab", "📊 Experiment Tracker"]
 )
 
 st.sidebar.markdown("---")
@@ -474,3 +475,248 @@ elif page == "🔬 Column Profiler":
             # Raw JSON
             with st.expander("📝 Raw JSON Response"):
                 st.json(result)
+
+# ═══════════════════════════════════════════════════════
+# PAGE 7: MODEL LAB
+# ═══════════════════════════════════════════════════════
+elif page == "🤖 Model Lab":
+    st.markdown('<p class="main-header">🤖 Model Lab</p>', unsafe_allow_html=True)
+    st.markdown("Train models on raw data and track every experiment.")
+
+    with st.expander("⚙️ Training Configuration", expanded=True):
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            exp_name = st.text_input("Experiment Name", "raw_baseline_v1")
+        with c2:
+            test_size = st.slider("Test Size", 0.1, 0.5, 0.2)
+        with c3:
+            random_state = st.number_input("Random State", 0, 9999, 42)
+
+        description = st.text_area("Description", "Training on raw messy data without any preprocessing")
+
+    if st.button("🚀 Train Model", type="primary"):
+        with st.spinner("Training model on raw data... This may take a moment."):
+            resp = requests.post(
+                f"{API_BASE}/models/train",
+                json={
+                    "experiment_name": exp_name,
+                    "description": description,
+                    "test_size": test_size,
+                    "random_state": random_state
+                },
+                timeout=120
+            )
+
+        if resp.status_code == 200:
+            result = resp.json()
+            st.markdown('<div class="success-box">', unsafe_allow_html=True)
+            st.markdown(f"### ✅ Experiment #{result['experiment_id']} Complete!")
+            st.markdown('</div>', unsafe_allow_html=True)
+
+            mcol1, mcol2, mcol3, mcol4 = st.columns(4)
+            with mcol1:
+                st.metric("Test R²", f"{result['metrics']['test_r2']:.4f}")
+            with mcol2:
+                st.metric("Test RMSE", f"${result['metrics']['test_rmse']:,.2f}")
+            with mcol3:
+                st.metric("Test MAE", f"${result['metrics']['test_mae']:,.2f}")
+            with mcol4:
+                st.metric("Rows Used", f"{result['rows_used']:,}")
+
+            st.markdown("#### Features Used")
+            st.write(result["features_used"])
+
+            with st.expander("📋 Full Metrics"):
+                st.json(result["metrics"])
+
+            with st.expander("📝 Raw Response"):
+                st.json(result)
+        else:
+            st.error(f"❌ Training failed: {resp.text}")
+
+    st.markdown("---")
+    st.markdown("### 🔮 Make Prediction")
+
+    # Fetch experiments for dropdown
+    exp_resp = requests.get(f"{API_BASE}/models/", timeout=10)
+    if exp_resp.status_code == 200:
+        experiments = exp_resp.json()
+        if experiments:
+            exp_options = {f"#{e['id']} - {e['experiment_name']} ({e['status']})": e['id'] for e in experiments if e['status'] == 'completed'}
+            if exp_options:
+                selected_exp = st.selectbox("Select Model (Experiment)", list(exp_options.keys()))
+                exp_id = exp_options[selected_exp]
+
+                # Get features for this experiment
+                feat_resp = requests.get(f"{API_BASE}/models/{exp_id}/features", timeout=10)
+                if feat_resp.status_code == 200:
+                    features_needed = [f["feature_name"] for f in feat_resp.json()["features"]]
+
+                    st.markdown("Enter feature values:")
+                    input_features = {}
+                    fcols = st.columns(min(len(features_needed), 4))
+                    for i, feat in enumerate(features_needed):
+                        with fcols[i % 4]:
+                            input_features[feat] = st.number_input(feat, value=0.0, key=f"pred_{feat}")
+
+                    if st.button("💰 Predict Price"):
+                        pred_resp = requests.post(
+                            f"{API_BASE}/models/predict",
+                            json={"experiment_id": exp_id, "features": input_features},
+                            timeout=10
+                        )
+                        if pred_resp.status_code == 200:
+                            pred = pred_resp.json()
+                            st.success(f"### 💵 Predicted Price: **${pred['predicted_price']:,.2f}**")
+                            with st.expander("Details"):
+                                st.json(pred)
+                        else:
+                            st.error(f"Prediction failed: {pred_resp.text}")
+            else:
+                st.info("No completed experiments yet. Train a model first!")
+        else:
+            st.info("No experiments found. Train your first model above!")
+
+# ═══════════════════════════════════════════════════════
+# PAGE 8: EXPERIMENT TRACKER
+# ═══════════════════════════════════════════════════════
+elif page == "📊 Experiment Tracker":
+    st.markdown('<p class="main-header">📊 Experiment Tracker</p>', unsafe_allow_html=True)
+    st.markdown("Your journey from useless → valuable model. Every run tracked.")
+
+    with st.spinner("Fetching experiments..."):
+        resp = requests.get(f"{API_BASE}/models/", timeout=10)
+
+    if resp.status_code != 200:
+        st.error("Failed to fetch experiments")
+    else:
+        experiments = resp.json()
+
+        if not experiments:
+            st.info("No experiments yet. Go to 🤖 Model Lab and train your first model!")
+        else:
+            st.markdown(f"### 📚 Total Experiments: **{len(experiments)}**")
+
+            # Experiment table
+            exp_df = pd.DataFrame(experiments)
+            st.dataframe(exp_df[["id", "experiment_name", "created_at", "status", "total_rows", "rows_after_drop", "metrics_summary"]],
+                        use_container_width=True)
+
+            # Select experiment to deep dive
+            st.markdown("---")
+            st.markdown("### 🔍 Deep Dive into an Experiment")
+
+            exp_ids = [e["id"] for e in experiments]
+            selected_id = st.selectbox("Select Experiment", exp_ids)
+
+            tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Metrics", "🔧 Features", "📈 Predictions", "📝 Logs", "📸 Snapshot"])
+
+            # ── Tab 1: Metrics ──
+            with tab1:
+                m_resp = requests.get(f"{API_BASE}/models/{selected_id}/metrics", timeout=10)
+                if m_resp.status_code == 200:
+                    metrics = m_resp.json()["metrics"]
+                    
+                    if metrics:
+                        mcol1, mcol2, mcol3 = st.columns(3)
+                        with mcol1:
+                            st.metric("Test R²", f"{metrics.get('test_r2', 0):.4f}")
+                            st.metric("Train R²", f"{metrics.get('train_r2', 0):.4f}")
+                        with mcol2:
+                            st.metric("Test RMSE", f"${metrics.get('test_rmse', 0):,.2f}")
+                            st.metric("Train RMSE", f"${metrics.get('train_rmse', 0):,.2f}")
+                        with mcol3:
+                            st.metric("Test MAE", f"${metrics.get('test_mae', 0):,.2f}")
+                            st.metric("Test MAPE", f"{metrics.get('test_mape', 0):.2f}%")
+
+                        # Metrics over time (if multiple experiments)
+                        if len(experiments) > 1:
+                            st.markdown("#### 📉 R² Score Journey")
+                            metrics_history = []
+                            for e in experiments:
+                                mr = requests.get(f"{API_BASE}/models/{e['id']}/metrics", timeout=5)
+                                if mr.status_code == 200:
+                                    m = mr.json()["metrics"]
+                                    m["experiment_id"] = e["id"]
+                                    m["experiment_name"] = e["experiment_name"]
+                                    metrics_history.append(m)
+
+                            if metrics_history:
+                                mh_df = pd.DataFrame(metrics_history)
+                                mh_df = mh_df.sort_values("experiment_id")
+                                st.line_chart(mh_df.set_index("experiment_name")[["test_r2", "train_r2"]])
+                    else:
+                        st.warning("No metrics recorded for this experiment")
+
+            # ── Tab 2: Features ──
+            with tab2:
+                f_resp = requests.get(f"{API_BASE}/models/{selected_id}/features", timeout=10)
+                if f_resp.status_code == 200:
+                    features = f_resp.json()["features"]
+                    if features:
+                        feat_df = pd.DataFrame(features)
+                        st.dataframe(feat_df, use_container_width=True)
+                        st.bar_chart(feat_df.set_index("feature_name")[["abs_coefficient"]])
+                    else:
+                        st.warning("No feature importance recorded")
+
+            # ── Tab 3: Predictions ──
+            with tab3:
+                p_resp = requests.get(f"{API_BASE}/models/{selected_id}/predictions?limit=100", timeout=10)
+                if p_resp.status_code == 200:
+                    preds = p_resp.json()["predictions"]
+                    if preds:
+                        pred_df = pd.DataFrame(preds)
+                        st.dataframe(pred_df, use_container_width=True)
+
+                        # Residual distribution
+                        st.markdown("#### Residual Distribution")
+                        st.bar_chart(pred_df["residual"].value_counts(bins=20).sort_index())
+                    else:
+                        st.warning("No predictions recorded")
+
+            # ── Tab 4: Logs ──
+            with tab4:
+                l_resp = requests.get(f"{API_BASE}/models/{selected_id}/logs", timeout=10)
+                if l_resp.status_code == 200:
+                    logs = l_resp.json()["logs"]
+                    if logs:
+                        for log in logs:
+                            level = log["log_level"]
+                            msg = log["message"]
+                            time = log["logged_at"]
+                            if level == "WARNING":
+                                st.warning(f"**{time}** — {msg}")
+                            elif level == "SUCCESS":
+                                st.success(f"**{time}** — {msg}")
+                            elif level == "ERROR":
+                                st.error(f"**{time}** — {msg}")
+                            else:
+                                st.info(f"**{time}** — {msg}")
+                    else:
+                        st.warning("No logs recorded")
+
+            # ── Tab 5: Snapshot ──
+            with tab5:
+                s_resp = requests.get(f"{API_BASE}/models/{selected_id}", timeout=10)
+                if s_resp.status_code == 200:
+                    exp_detail = s_resp.json()
+                    snap = exp_detail.get("snapshot")
+                    if snap:
+                        st.markdown("#### Data Quality at Training Time")
+                        scol1, scol2, scol3, scol4 = st.columns(4)
+                        with scol1:
+                            st.metric("Missing Values", snap.get("missing_count", 0))
+                        with scol2:
+                            st.metric("Duplicates", snap.get("duplicate_count", 0))
+                        with scol3:
+                            st.metric("Negative Targets", snap.get("negative_target_count", 0))
+                        with scol4:
+                            st.metric("Outliers", snap.get("outlier_count", 0))
+
+                        st.markdown("#### Feature DTypes")
+                        dtypes = json.loads(snap.get("feature_dtypes", "{}"))
+                        dtype_df = pd.DataFrame({"Column": list(dtypes.keys()), "Dtype": list(dtypes.values())})
+                        st.dataframe(dtype_df, use_container_width=True)
+                    else:
+                        st.warning("No snapshot recorded")

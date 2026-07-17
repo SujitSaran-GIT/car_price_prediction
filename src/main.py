@@ -1,8 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from src.routers import cars
+from src.routers import cars, models
 from src.config import settings
 from src.services.data_service import data_service
+from src.database.db import init_db
+
+init_db()
 
 # Pre-load data on startup
 data_service.load_data()
@@ -41,6 +44,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(cars.router)
+app.include_router(models.router)
 
 @app.get("/")
 async def root():
@@ -54,7 +58,10 @@ async def root():
             "car_detail": "/cars/{car_id}",
             "summary": "/cars/stats/summary",
             "quality": "/cars/stats/quality",
-            "unique_values": "/cars/columns/{column_name}/unique"
+            "unique_values": "/cars/columns/{column_name}/unique",
+            "experiments": "/models/",
+            "train": "POST /models/train",
+            "predict": "POST /models/predict"
         }
     }
 

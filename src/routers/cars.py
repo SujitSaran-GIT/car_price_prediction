@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional, List
 from src.services.data_service import data_service
-from src.models import CarListResponse, DataQualityReport
+from src.schemas import CarListResponse, DataQualityReport
 from src.config import settings
 
 router = APIRouter(prefix="/cars", tags=["Cars"])
